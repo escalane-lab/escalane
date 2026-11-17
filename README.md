@@ -4,7 +4,8 @@
 
 Research prototype: a **catalog-bound SysOps harness** for System One decision models (`choice` / `noul` / `score`). The model answers typed decisions only; the harness alone may mutate via catalog templates after ordered gates—and dry-run is the default.
 
-Installable package / CLI: **`escalane`**. Public home: [github.com/escalane-lab/escalane](https://github.com/escalane-lab/escalane).
+Installable package / CLI: **`escalane`**. Public home: [github.com/escalane-lab/escalane](https://github.com/escalane-lab/escalane).  
+Docs / site: [escalane-lab.github.io/escalane-docs](https://escalane-lab.github.io/escalane-docs/).
 
 ## Setup (uv)
 
