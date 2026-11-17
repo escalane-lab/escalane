@@ -14,4 +14,4 @@ Org: [escalane-lab](https://github.com/escalane-lab)
 
 - Code: https://github.com/escalane-lab/escalane
 - Docs / site: https://escalane-lab.github.io/escalane-docs/
-- Demo screenshot: https://github.com/escalane-lab/escalane-docs/blob/main/site/public/demo/demo-decide-terminal.png
+- Demo screenshot: https://escalane-lab.github.io/escalane-docs/demo/demo-decide-live-terminal.png
