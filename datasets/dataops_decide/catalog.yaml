@@ -1,0 +1,101 @@
+version: 1
+defaults:
+  confidence_min: 0.90
+  noul_min: 0.85
+  write_enabled: false
+  dry_run_default: true
+
+playbooks:
+  - id: databricks_jobs_run_now
+    criteria: >
+      Databricks Jobs run failed with a known-transient cause (cloud-provider
+      spot loss, object-store timeout, or driver OOM on an idempotent ETL job);
+      job is not mid pipeline backfill; no Unity Catalog / schema migrate lock;
+      no finance-close window; latest run life_cycle_state is TERMINATED/INTERNAL_ERROR
+      or FAILED (not RUNNING).
+    risk_tier: low
+    auto_max_blast: 0.8
+    require_hitl_above: 1.5
+    lock_key: "databricks:job:{job_id}"
+    cooldown_seconds: 300
+    params_schema:
+      type: object
+      required: [job_id]
+      properties:
+        job_id: { type: string, pattern: "^[0-9]{3,12}$" }
+    prechecks:
+      - type: lock_absent
+        id: not_backfilling
+        lock: pipeline_backfill
+      - type: lock_absent
+        id: not_migrating_schema
+        lock: schema_migrate
+    executor:
+      kind: databricks
+      args_template: ["jobs", "run-now", "{job_id}"]
+    postchecks:
+      - type: metric
+        id: job_not_failed
+        state_key: databricks_job_failed
+        expect: 0
+    precision_gate:
+      min_empirical_precision: 0.95
+
+  - id: databricks_cluster_restart
+    criteria: >
+      Interactive or job cluster unhealthy (executor heartbeat loss / unreachable
+      workers) while the workload is replay-safe; cluster not shared with active
+      backfill; no schema_migrate lock; restart preferred over terminate+create.
+    risk_tier: low
+    auto_max_blast: 0.9
+    require_hitl_above: 1.6
+    lock_key: "databricks:cluster:{cluster_id}"
+    cooldown_seconds: 600
+    params_schema:
+      type: object
+      required: [cluster_id]
+      properties:
+        cluster_id: { type: string, pattern: "^[a-z0-9-]{8,64}$" }
+    prechecks:
+      - type: lock_absent
+        id: not_backfilling
+        lock: pipeline_backfill
+    executor:
+      kind: databricks
+      args_template: ["clusters", "restart", "{cluster_id}"]
+    precision_gate:
+      min_empirical_precision: 0.95
+
+  - id: databricks_sql_warehouse_start
+    criteria: >
+      SQL warehouse is STOPPED while freshness/SLO alerts fire for dashboards
+      that depend on it; warehouse is allowlisted for auto-start; no finance_close
+      lock; start is preferred over resizing (resize stays human-owned).
+    risk_tier: low
+    auto_max_blast: 0.7
+    require_hitl_above: 1.4
+    lock_key: "databricks:warehouse:{warehouse_id}"
+    cooldown_seconds: 300
+    params_schema:
+      type: object
+      required: [warehouse_id]
+      properties:
+        warehouse_id: { type: string, pattern: "^[a-f0-9]{8,32}$" }
+    prechecks:
+      - type: lock_absent
+        id: not_finance_close
+        lock: finance_close
+    executor:
+      kind: databricks
+      args_template: ["warehouses", "start", "{warehouse_id}"]
+    precision_gate:
+      min_empirical_precision: 0.95
+
+  - id: escalate
+    criteria: >
+      Databricks Jobs, cluster, warehouse, DLT, or Unity Catalog incident does
+      not match a safe automated playbook; active pipeline backfill or schema
+      migrate; finance close; non-idempotent job; evidence incomplete; or blast
+      would exceed local authority.
+    risk_tier: none
+    executor: { kind: none }

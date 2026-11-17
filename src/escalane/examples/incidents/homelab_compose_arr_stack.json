@@ -1,0 +1,46 @@
+{
+  "id": "demo_homelab_compose_arr_stack",
+  "golden_choice": "docker_compose_restart_service",
+  "noul_safe": true,
+  "score_blast_gold": 0.35,
+  "state": {
+    "alert": {
+      "alertname": "ComposeServiceUnhealthy",
+      "service": "sonarr",
+      "severity": "warning",
+      "labels": {
+        "project": "media",
+        "service": "sonarr",
+        "host": "media-01",
+        "owner": "homelab"
+      }
+    },
+    "metrics": {
+      "compose_service_health": 0,
+      "edge_proxy_up": 1,
+      "disk_used_pct_root": 55
+    },
+    "locks": {
+      "host_maintenance": false,
+      "stack_upgrade": false,
+      "storage_rebuild": false
+    },
+    "inventory": {
+      "host": "media-01",
+      "project": "media",
+      "service": "sonarr",
+      "role": "media",
+      "platform": "compose"
+    },
+    "log_excerpts": [
+      {
+        "source": "docker-compose",
+        "lines": [
+          "service sonarr unhealthy",
+          "SQLite: database is locked (retry exhausted)"
+        ]
+      }
+    ],
+    "evidence_refs": ["alert:ComposeServiceUnhealthy:media/sonarr"]
+  }
+}

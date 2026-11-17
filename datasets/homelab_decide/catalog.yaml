@@ -1,0 +1,256 @@
+version: 1
+defaults:
+  confidence_min: 0.90
+  noul_min: 0.85
+  write_enabled: false
+  dry_run_default: true
+
+playbooks:
+  - id: restart_docker_container
+    criteria: >
+      A single Docker container is unhealthy, restarting in a crash loop, or
+      not responding on its published port while the host disk and Docker daemon
+      are healthy; container is allowlisted (media, docs, dashboards — not the
+      reverse proxy edge or the node that terminates SSH/VPN); no host_maintenance
+      lock; no docker_prune in progress.
+    risk_tier: low
+    auto_max_blast: 0.7
+    require_hitl_above: 1.4
+    lock_key: "docker:container:{container}"
+    cooldown_seconds: 180
+    params_schema:
+      type: object
+      required: [container]
+      properties:
+        container: { type: string, pattern: "^[a-z0-9][a-z0-9_-]{1,63}$" }
+    prechecks:
+      - type: lock_absent
+        id: not_maint
+        lock: host_maintenance
+    executor:
+      kind: cli
+      binary: docker
+      args_template: ["restart", "{container}"]
+    precision_gate:
+      min_empirical_precision: 0.95
+
+  - id: restart_caddy
+    criteria: >
+      Caddy (or the homelab reverse proxy) returns bad gateway / TLS handshake
+      errors while upstream containers are healthy; config validate is OK; not
+      mid certificate renew storm; host not in maintenance.
+    risk_tier: low
+    auto_max_blast: 0.9
+    require_hitl_above: 1.5
+    lock_key: "svc:caddy:{host}"
+    cooldown_seconds: 300
+    params_schema:
+      type: object
+      required: [host]
+      properties:
+        host: { type: string, pattern: "^[a-z0-9-]+$" }
+    prechecks:
+      - type: lock_absent
+        id: not_maint
+        lock: host_maintenance
+    executor:
+      kind: systemd
+      unit: caddy
+      action: restart
+    precision_gate:
+      min_empirical_precision: 0.95
+
+  - id: restart_homeassistant
+    criteria: >
+      Home Assistant UI or API unreachable / watchdog unhealthy; Zigbee/Z-Wave
+      sticks are not mid-firmware-flash; no host_maintenance; prefer container
+      or unit restart over host reboot.
+    risk_tier: low
+    auto_max_blast: 0.8
+    require_hitl_above: 1.5
+    lock_key: "svc:homeassistant:{host}"
+    cooldown_seconds: 300
+    params_schema:
+      type: object
+      required: [host]
+      properties:
+        host: { type: string, pattern: "^[a-z0-9-]+$" }
+    prechecks:
+      - type: lock_absent
+        id: not_maint
+        lock: host_maintenance
+      - type: lock_absent
+        id: not_flashing_radio
+        lock: radio_firmware_flash
+    executor:
+      kind: systemd
+      unit: home-assistant
+      action: restart
+    precision_gate:
+      min_empirical_precision: 0.95
+
+  - id: restart_pihole
+    criteria: >
+      Pi-hole / local DNS FTL unresponsive or FTL offline while the host is up;
+      clients failing DNS; no intentional DNS cutover / unbound migrate lock;
+      host not in maintenance.
+    risk_tier: low
+    auto_max_blast: 0.8
+    require_hitl_above: 1.5
+    lock_key: "svc:pihole:{host}"
+    cooldown_seconds: 180
+    params_schema:
+      type: object
+      required: [host]
+      properties:
+        host: { type: string, pattern: "^[a-z0-9-]+$" }
+    prechecks:
+      - type: lock_absent
+        id: not_dns_cutover
+        lock: dns_cutover
+    executor:
+      kind: systemd
+      unit: pihole-FTL
+      action: restart
+    precision_gate:
+      min_empirical_precision: 0.95
+
+  - id: restart_samba
+    criteria: >
+      Samba/CIFS shares unreachable from LAN while disk mounts are healthy;
+      no array resilver / scrub lock; host not in maintenance.
+    risk_tier: low
+    auto_max_blast: 0.7
+    require_hitl_above: 1.4
+    lock_key: "svc:smb:{host}"
+    cooldown_seconds: 300
+    params_schema:
+      type: object
+      required: [host]
+      properties:
+        host: { type: string, pattern: "^[a-z0-9-]+$" }
+    prechecks:
+      - type: lock_absent
+        id: not_storage_rebuild
+        lock: storage_rebuild
+    executor:
+      kind: systemd
+      unit: smbd
+      action: restart
+    precision_gate:
+      min_empirical_precision: 0.95
+
+  - id: docker_compose_restart_service
+    criteria: >
+      One service in a Docker Compose stack is unhealthy; compose project is
+      known; restarting a single service is enough (not full stack down);
+      not the edge proxy; no host_maintenance.
+    risk_tier: low
+    auto_max_blast: 0.75
+    require_hitl_above: 1.45
+    lock_key: "compose:{project}:{service}"
+    cooldown_seconds: 180
+    params_schema:
+      type: object
+      required: [project, service]
+      properties:
+        project: { type: string, pattern: "^[a-z0-9][a-z0-9_-]{1,63}$" }
+        service: { type: string, pattern: "^[a-z0-9][a-z0-9_-]{1,63}$" }
+    prechecks:
+      - type: lock_absent
+        id: not_maint
+        lock: host_maintenance
+    executor:
+      kind: cli
+      binary: docker
+      args_template: ["compose", "-p", "{project}", "restart", "{service}"]
+    precision_gate:
+      min_empirical_precision: 0.95
+
+  - id: clear_homelab_tmp
+    criteria: >
+      /tmp or a dedicated scratch mount is above ~90% while root and data pools
+      are fine; mount is not / or the media pool; host not in maintenance.
+    risk_tier: medium
+    auto_max_blast: 1.0
+    require_hitl_above: 1.8
+    lock_key: "disk:tmp:{host}"
+    cooldown_seconds: 600
+    params_schema:
+      type: object
+      required: [host]
+      properties:
+        host: { type: string, pattern: "^[a-z0-9-]+$" }
+    prechecks:
+      - type: lock_absent
+        id: not_maint
+        lock: host_maintenance
+    executor:
+      kind: script
+      script: scripts/homelab/clear_tmp.sh
+    precision_gate:
+      min_empirical_precision: 0.95
+
+  - id: docker_image_prune_unused
+    criteria: >
+      Docker disk on the graph driver is critically full; no containers are
+      mid-upgrade; prune unused images only (not volumes); no storage_rebuild
+      lock; accept brief pull latency after prune.
+    risk_tier: medium
+    auto_max_blast: 1.1
+    require_hitl_above: 1.8
+    lock_key: "docker:prune:{host}"
+    cooldown_seconds: 3600
+    params_schema:
+      type: object
+      required: [host]
+      properties:
+        host: { type: string, pattern: "^[a-z0-9-]+$" }
+    prechecks:
+      - type: lock_absent
+        id: not_storage_rebuild
+        lock: storage_rebuild
+      - type: lock_absent
+        id: not_stack_upgrade
+        lock: stack_upgrade
+    executor:
+      kind: cli
+      binary: docker
+      args_template: ["image", "prune", "-f"]
+    precision_gate:
+      min_empirical_precision: 0.97
+
+  - id: reload_sshd_config
+    criteria: >
+      sshd config was edited and `sshd -t` is OK; reload (not restart) to pick
+      up ListenAddress/Match changes; sshd_lockout_risk is false; alternative
+      console or local access exists; host not in maintenance.
+    risk_tier: medium
+    auto_max_blast: 1.5
+    require_hitl_above: 1.2
+    lock_key: "svc:sshd:{host}"
+    cooldown_seconds: 600
+    params_schema:
+      type: object
+      required: [host]
+      properties:
+        host: { type: string, pattern: "^[a-z0-9-]+$" }
+    prechecks:
+      - type: lock_absent
+        id: not_maint
+        lock: host_maintenance
+    executor:
+      kind: systemd
+      unit: ssh
+      action: reload
+    precision_gate:
+      min_empirical_precision: 0.98
+
+  - id: escalate
+    criteria: >
+      Homelab incident does not match a safe automated playbook; disk/array
+      failure; VPN/SSH lockout risk; edge proxy + DNS both down; ZFS/mdadm
+      rebuild; unknown container; evidence incomplete; or blast too high —
+      needs a human at the console.
+    risk_tier: none
+    executor: { kind: none }

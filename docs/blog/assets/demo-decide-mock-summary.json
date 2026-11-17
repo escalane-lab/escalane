@@ -1,0 +1,10 @@
+{
+  "model": "mock",
+  "catalog_hash": "sha256:88d422f6580a\u2026",
+  "playbook": "restart_php_fpm",
+  "noul": 0.95,
+  "blast_score": 0.3,
+  "gate_decision": "hitl",
+  "gate_reason": "label_precision",
+  "dry_run_only": true
+}

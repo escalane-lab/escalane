@@ -1,0 +1,64 @@
+version: 1
+defaults:
+  confidence_min: 0.90
+  noul_min: 0.85
+  write_enabled: false
+  dry_run_default: true
+
+playbooks:
+  - id: restart_php_fpm
+    criteria: >
+      PHP-FPM workers stuck or idle=0 with HTTP 502 on the app pool;
+      no database migration lock; host not in maintenance.
+    risk_tier: low
+    auto_max_blast: 0.8
+    require_hitl_above: 1.5
+    lock_key: "svc:php-fpm:{host}"
+    cooldown_seconds: 300
+    params_schema:
+      type: object
+      required: [host]
+      properties:
+        host: { type: string, pattern: "^[a-z0-9-]+$" }
+    prechecks:
+      - type: lock_absent
+        id: not_migrating
+        lock: db_migrate
+    executor:
+      kind: systemd
+      unit: php8.2-fpm
+      action: restart
+    postchecks:
+      - type: http
+        id: health
+        url: "http://$host:8080/healthz"
+        expect_status: 200
+    precision_gate:
+      min_empirical_precision: 0.95
+
+  - id: clear_tmp_disk
+    criteria: >
+      Filesystem usage on /tmp exceeds 90%; mount is not root or a critical
+      write path; host not in maintenance.
+    risk_tier: medium
+    auto_max_blast: 1.0
+    require_hitl_above: 2.0
+    lock_key: "disk:tmp:{host}"
+    cooldown_seconds: 600
+    params_schema:
+      type: object
+      required: [host]
+      properties:
+        host: { type: string, pattern: "^[a-z0-9-]+$" }
+    executor:
+      kind: script
+      script: scripts/clear_tmp_disk.sh
+    precision_gate:
+      min_empirical_precision: 0.95
+
+  - id: escalate
+    criteria: >
+      Incident does not match any automated playbook, evidence is incomplete,
+      or action would exceed local authority.
+    risk_tier: none
+    executor: { kind: none }

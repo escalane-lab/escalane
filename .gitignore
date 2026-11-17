@@ -1,0 +1,11 @@
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv
+.env
+eval/sysops_decide/results/
+eval/sysops_decide/episodes/
+.pytest_cache/

@@ -1,0 +1,32 @@
+[project]
+name = "escalane"
+version = "0.1.0"
+description = "Escalane — catalog-bound Decide+Act harness for System One decision models (research prototype)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.28.1",
+    "pydantic>=2.14.3",
+    "pyyaml>=6.0.3",
+]
+
+[project.scripts]
+escalane = "escalane.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.13.6,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]
+markers = [
+    "unit: offline unit tests (no network, no subprocess harness loops)",
+    "integration: offline real-like pipeline / CLI / eval plumbing",
+    "live: optional live Ollama / System One backend tests",
+]

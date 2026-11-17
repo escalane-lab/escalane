@@ -1,0 +1,43 @@
+{
+  "id": "demo_homelab_pihole_ftl_down",
+  "golden_choice": "restart_pihole",
+  "noul_safe": true,
+  "score_blast_gold": 0.4,
+  "state": {
+    "alert": {
+      "alertname": "DnsLocalDown",
+      "service": "pihole",
+      "severity": "warning",
+      "labels": {
+        "host": "dns-01",
+        "owner": "homelab"
+      }
+    },
+    "metrics": {
+      "pihole_ftl_up": 0,
+      "dns_query_fail_ratio_5m": 0.91,
+      "unbound_up": 1,
+      "disk_used_pct_root": 48
+    },
+    "locks": {
+      "host_maintenance": false,
+      "dns_cutover": false,
+      "storage_rebuild": false
+    },
+    "inventory": {
+      "host": "dns-01",
+      "role": "dns",
+      "platform": "systemd"
+    },
+    "log_excerpts": [
+      {
+        "source": "pihole-FTL",
+        "lines": [
+          "FTL crashed after database locked timeout",
+          "DNSMASQ_EXCEPTION: failed to bind port 53"
+        ]
+      }
+    ],
+    "evidence_refs": ["alert:DnsLocalDown:dns-01"]
+  }
+}

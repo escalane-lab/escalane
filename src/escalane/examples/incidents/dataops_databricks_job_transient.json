@@ -1,0 +1,56 @@
+{
+  "id": "demo_dataops_databricks_job_transient",
+  "golden_choice": "databricks_jobs_run_now",
+  "noul_safe": true,
+  "score_blast_gold": 0.4,
+  "state": {
+    "alert": {
+      "alertname": "DatabricksJobFailed",
+      "service": "analytics-etl",
+      "severity": "warning",
+      "labels": {
+        "job_id": "718293041562",
+        "job_name": "orders_hourly_etl",
+        "workspace": "acme-prod",
+        "owner_team": "data-platform"
+      }
+    },
+    "metrics": {
+      "databricks_job_failed": 1,
+      "databricks_run_life_cycle": 1,
+      "databricks_run_result_state": 1,
+      "spot_loss_count_1h": 3,
+      "upstream_watermark_lag_min": 6,
+      "job_idempotent": 1
+    },
+    "locks": {
+      "pipeline_backfill": false,
+      "schema_migrate": false,
+      "finance_close": false,
+      "dlt_pipeline_update": false
+    },
+    "inventory": {
+      "job_id": "718293041562",
+      "job_name": "orders_hourly_etl",
+      "workspace": "acme-prod",
+      "env": "prod",
+      "platform": "databricks",
+      "role": "etl"
+    },
+    "log_excerpts": [
+      {
+        "source": "databricks-jobs",
+        "lines": [
+          "Run result_state=FAILED life_cycle_state=TERMINATED",
+          "Caused by: Executor lost due to spot interruption (exit 143)",
+          "Job marked idempotent replay-safe by data-platform"
+        ]
+      }
+    ],
+    "evidence_refs": [
+      "alert:DatabricksJobFailed:718293041562",
+      "workspace:acme-prod",
+      "run:452189003"
+    ]
+  }
+}

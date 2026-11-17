@@ -1,0 +1,273 @@
+version: 1
+defaults:
+  confidence_min: 0.90
+  noul_min: 0.85
+  write_enabled: false
+  dry_run_default: true
+
+playbooks:
+  - id: restart_php_fpm
+    criteria: >
+      PHP-FPM workers stuck or idle=0 with HTTP 502 on the app pool;
+      no database migration lock; host not in maintenance.
+    risk_tier: low
+    auto_max_blast: 0.8
+    require_hitl_above: 1.5
+    lock_key: "svc:php-fpm:{host}"
+    cooldown_seconds: 300
+    params_schema:
+      type: object
+      required: [host]
+      properties:
+        host: { type: string, pattern: "^[a-z0-9-]+$" }
+    prechecks:
+      - type: lock_absent
+        id: not_migrating
+        lock: db_migrate
+    executor:
+      kind: systemd
+      unit: php8.2-fpm
+      action: restart
+    postchecks:
+      - type: http
+        id: health
+        url: "http://$host:8080/healthz"
+        expect_status: 200
+        timeout_seconds: 30
+    precision_gate:
+      min_empirical_precision: 0.95
+
+  - id: restart_nginx
+    criteria: >
+      Nginx returning bad gateway or worker crash loops while config test is OK;
+      not mid-reload storm; host not in maintenance.
+    risk_tier: low
+    auto_max_blast: 0.8
+    require_hitl_above: 1.5
+    lock_key: "svc:nginx:{host}"
+    cooldown_seconds: 300
+    params_schema:
+      type: object
+      required: [host]
+      properties:
+        host: { type: string, pattern: "^[a-z0-9-]+$" }
+    executor:
+      kind: systemd
+      unit: nginx
+      action: restart
+    precision_gate:
+      min_empirical_precision: 0.95
+
+  - id: clear_tmp_disk
+    criteria: >
+      Filesystem usage on /tmp (or dedicated tmp mount) exceeds 90%;
+      mount is not root (/); no critical write path on that mount;
+      host not in maintenance.
+    risk_tier: medium
+    auto_max_blast: 1.0
+    require_hitl_above: 2.0
+    lock_key: "disk:tmp:{host}"
+    cooldown_seconds: 600
+    params_schema:
+      type: object
+      required: [host]
+      properties:
+        host: { type: string, pattern: "^[a-z0-9-]+$" }
+    executor:
+      kind: script
+      script: scripts/clear_tmp_disk.sh
+    precision_gate:
+      min_empirical_precision: 0.95
+
+  - id: rotate_app_logs
+    criteria: >
+      Disk pressure driven by application log growth under known retention
+      policy; not root filesystem critical; host not in maintenance.
+    risk_tier: low
+    auto_max_blast: 0.8
+    require_hitl_above: 1.5
+    lock_key: "logs:app:{host}"
+    cooldown_seconds: 900
+    params_schema:
+      type: object
+      required: [host]
+      properties:
+        host: { type: string, pattern: "^[a-z0-9-]+$" }
+    executor:
+      kind: script
+      script: scripts/rotate_app_logs.sh
+    precision_gate:
+      min_empirical_precision: 0.90
+
+  - id: restart_redis_local
+    criteria: >
+      Single-host local Redis cache unhealthy or OOM; inventory role is not
+      primary of a clustered Redis; host not in maintenance.
+    risk_tier: medium
+    auto_max_blast: 1.0
+    require_hitl_above: 1.8
+    lock_key: "svc:redis:{host}"
+    cooldown_seconds: 600
+    params_schema:
+      type: object
+      required: [host]
+      properties:
+        host: { type: string, pattern: "^[a-z0-9-]+$" }
+    executor:
+      kind: systemd
+      unit: redis-server
+      action: restart
+    precision_gate:
+      min_empirical_precision: 0.95
+
+  - id: flush_dns_cache
+    criteria: >
+      Stale local resolver cache causing name lookup failures; host is not an
+      authoritative nameserver; evidence points to nscd/systemd-resolved.
+    risk_tier: low
+    auto_max_blast: 0.6
+    require_hitl_above: 1.5
+    lock_key: "dns:cache:{host}"
+    cooldown_seconds: 300
+    params_schema:
+      type: object
+      required: [host]
+      properties:
+        host: { type: string, pattern: "^[a-z0-9-]+$" }
+    executor:
+      kind: script
+      script: scripts/flush_dns_cache.sh
+    precision_gate:
+      min_empirical_precision: 0.90
+
+  - id: reload_sshd_config
+    criteria: >
+      sshd config validated (sshd -t OK) after approved change; reload only;
+      not a lockout-risk bind/address change; host not in maintenance.
+    risk_tier: high
+    auto_max_blast: 0.5
+    require_hitl_above: 1.0
+    lock_key: "svc:sshd:{host}"
+    cooldown_seconds: 1800
+    params_schema:
+      type: object
+      required: [host]
+      properties:
+        host: { type: string, pattern: "^[a-z0-9-]+$" }
+    executor:
+      kind: systemd
+      unit: ssh
+      action: reload
+    precision_gate:
+      min_empirical_precision: 0.98
+
+  - id: restart_chrony
+    criteria: >
+      Clock skew alerts on a client host; chrony/ntpd unhealthy; not a
+      deliberate time-stop or leap-smear maintenance window.
+    risk_tier: low
+    auto_max_blast: 0.7
+    require_hitl_above: 1.5
+    lock_key: "svc:chrony:{host}"
+    cooldown_seconds: 600
+    params_schema:
+      type: object
+      required: [host]
+      properties:
+        host: { type: string, pattern: "^[a-z0-9-]+$" }
+    executor:
+      kind: systemd
+      unit: chrony
+      action: restart
+    precision_gate:
+      min_empirical_precision: 0.90
+
+  - id: enable_swap_emergency
+    criteria: >
+      OOM pressure with policy allowing temporary swap; root filesystem has
+      free space for swapfile; host not in maintenance.
+    risk_tier: high
+    auto_max_blast: 1.2
+    require_hitl_above: 1.5
+    lock_key: "mem:swap:{host}"
+    cooldown_seconds: 3600
+    params_schema:
+      type: object
+      required: [host]
+      properties:
+        host: { type: string, pattern: "^[a-z0-9-]+$" }
+    executor:
+      kind: script
+      script: scripts/enable_swap_emergency.sh
+    precision_gate:
+      min_empirical_precision: 0.98
+
+  - id: disable_cron_job
+    criteria: >
+      Runaway cron job identified by known job id from state/alert labels;
+      job is listed in allowlisted cron inventory; not a system-critical timer.
+    risk_tier: medium
+    auto_max_blast: 0.9
+    require_hitl_above: 1.8
+    lock_key: "cron:{host}:{job_id}"
+    cooldown_seconds: 600
+    params_schema:
+      type: object
+      required: [host, job_id]
+      properties:
+        host: { type: string, pattern: "^[a-z0-9-]+$" }
+        job_id: { type: string, pattern: "^[a-z0-9_-]+$" }
+    executor:
+      kind: script
+      script: scripts/disable_cron_job.sh
+    precision_gate:
+      min_empirical_precision: 0.95
+
+  - id: restart_docker_container
+    criteria: >
+      Single named Docker container unhealthy on a non-orchestrated host;
+      not swarm/k8s-managed; container name from inventory only.
+    risk_tier: medium
+    auto_max_blast: 1.0
+    require_hitl_above: 1.8
+    lock_key: "docker:{host}:{container}"
+    cooldown_seconds: 300
+    params_schema:
+      type: object
+      required: [host, container]
+      properties:
+        host: { type: string, pattern: "^[a-z0-9-]+$" }
+        container: { type: string, pattern: "^[a-z0-9_-]+$" }
+    executor:
+      kind: script
+      script: scripts/restart_docker_container.sh
+    precision_gate:
+      min_empirical_precision: 0.95
+
+  - id: unblock_fail2ban_ip
+    criteria: >
+      Fail2ban false-positive ban; IP taken only from alert labels; not a
+      confirmed attack pattern; host not in maintenance.
+    risk_tier: medium
+    auto_max_blast: 0.8
+    require_hitl_above: 1.5
+    lock_key: "f2b:{host}"
+    cooldown_seconds: 300
+    params_schema:
+      type: object
+      required: [host, ip]
+      properties:
+        host: { type: string, pattern: "^[a-z0-9-]+$" }
+        ip: { type: string, pattern: "^[0-9.]+$" }
+    executor:
+      kind: script
+      script: scripts/unblock_fail2ban_ip.sh
+    precision_gate:
+      min_empirical_precision: 0.95
+
+  - id: escalate
+    criteria: >
+      Incident does not match any automated playbook, evidence is incomplete,
+      or action would exceed local authority.
+    risk_tier: none
+    executor: { kind: none }

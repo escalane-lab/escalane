@@ -1,0 +1,25 @@
+{
+  "id": "demo_php_502",
+  "golden_choice": "restart_php_fpm",
+  "noul_safe": true,
+  "score_blast_gold": 0.3,
+  "state": {
+    "alert": {
+      "alertname": "Http502High",
+      "service": "checkout-api",
+      "severity": "warning",
+      "labels": { "host": "web-02", "pool": "www" }
+    },
+    "metrics": {
+      "phpfpm_idle_processes": 0,
+      "phpfpm_active_processes": 48,
+      "http_5xx_rate_5m": 0.42
+    },
+    "locks": { "db_migrate": false, "host_maintenance": false },
+    "inventory": { "host": "web-02", "role": "app", "az": "az-a" },
+    "log_excerpts": [
+      { "source": "php-fpm", "lines": ["WARNING: [pool www] server reached max_children"] }
+    ],
+    "evidence_refs": ["alert:Http502High:web-02:demo"]
+  }
+}
