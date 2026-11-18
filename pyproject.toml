@@ -4,14 +4,23 @@ version = "0.1.0"
 description = "Escalane — catalog-bound Decide+Act harness for System One decision models (research prototype)"
 readme = "README.md"
 requires-python = ">=3.11"
+authors = [
+    { name = "Mátyás Kuti-Kreszács", email = "kutikmatyas@gmail.com" },
+]
 dependencies = [
     "httpx>=0.28.1",
     "pydantic>=2.14.3",
     "pyyaml>=6.0.3",
 ]
 
+[project.optional-dependencies]
+acp = [
+    "agent-client-protocol>=0.4.0",
+]
+
 [project.scripts]
 escalane = "escalane.cli:main"
+escalane-acp = "escalane.acp_agent:main"
 
 [build-system]
 requires = ["uv_build>=0.13.6,<0.14.0"]
@@ -29,4 +38,6 @@ markers = [
     "unit: offline unit tests (no network, no subprocess harness loops)",
     "integration: offline real-like pipeline / CLI / eval plumbing",
     "live: optional live Ollama / System One backend tests",
+    "live_docker: optional Docker Compose stack tests",
+    "acp: optional Agent Client Protocol agent tests",
 ]

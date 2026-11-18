@@ -38,7 +38,11 @@ def run_episode(
     bound: dict[str, Any] = {}
     if choice and choice in catalog.ids and choice != "escalate":
         try:
-            bound = bind_params(state, catalog.get(choice))
+            bound = bind_params(
+                state,
+                catalog.get(choice),
+                catalog_allowlists=getattr(catalog, "allowlists", None),
+            )
         except StateError:
             bound = {}
 

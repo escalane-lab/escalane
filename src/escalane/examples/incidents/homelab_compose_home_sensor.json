@@ -1,0 +1,47 @@
+{
+  "id": "demo_homelab_compose_home_sensor",
+  "golden_choice": "docker_compose_restart_service",
+  "noul_safe": true,
+  "score_blast_gold": 0.35,
+  "state": {
+    "alert": {
+      "alertname": "ComposeServiceUnhealthy",
+      "service": "sensor-bridge",
+      "severity": "warning",
+      "labels": {
+        "project": "home",
+        "service": "sensor-bridge",
+        "host": "laptop-01",
+        "owner": "homelab"
+      }
+    },
+    "metrics": {
+      "compose_service_health": 0,
+      "edge_proxy_up": 1,
+      "disk_used_pct_root": 48,
+      "docker_daemon_up": 1
+    },
+    "locks": {
+      "host_maintenance": false,
+      "stack_upgrade": false,
+      "storage_rebuild": false
+    },
+    "inventory": {
+      "host": "laptop-01",
+      "project": "home",
+      "service": "sensor-bridge",
+      "role": "home-automation",
+      "platform": "compose"
+    },
+    "log_excerpts": [
+      {
+        "source": "docker-compose",
+        "lines": [
+          "service sensor-bridge unhealthy",
+          "sensor-bridge: HTTP 503 on :8080/health"
+        ]
+      }
+    ],
+    "evidence_refs": ["alert:ComposeServiceUnhealthy:home/sensor-bridge"]
+  }
+}

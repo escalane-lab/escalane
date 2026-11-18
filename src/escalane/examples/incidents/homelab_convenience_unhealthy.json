@@ -1,0 +1,47 @@
+{
+  "id": "demo_homelab_convenience_unhealthy",
+  "golden_choice": "restart_docker_container",
+  "noul_safe": true,
+  "score_blast_gold": 0.3,
+  "state": {
+    "alert": {
+      "alertname": "ContainerUnhealthy",
+      "service": "convenience-app",
+      "severity": "warning",
+      "labels": {
+        "container": "convenience-app",
+        "host": "laptop-01",
+        "owner": "homelab"
+      }
+    },
+    "metrics": {
+      "container_health": 0,
+      "container_restarts_1h": 3,
+      "docker_daemon_up": 1,
+      "disk_used_pct_root": 48,
+      "edge_proxy_up": 1
+    },
+    "locks": {
+      "host_maintenance": false,
+      "storage_rebuild": false,
+      "stack_upgrade": false,
+      "dns_cutover": false
+    },
+    "inventory": {
+      "host": "laptop-01",
+      "container": "convenience-app",
+      "role": "convenience",
+      "platform": "docker"
+    },
+    "log_excerpts": [
+      {
+        "source": "docker",
+        "lines": [
+          "health: failing streak=3",
+          "convenience-app: HTTP 503 on :8080/health"
+        ]
+      }
+    ],
+    "evidence_refs": ["alert:ContainerUnhealthy:convenience-app:laptop-01"]
+  }
+}

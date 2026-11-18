@@ -290,7 +290,9 @@ def run_case(
     bound: dict[str, Any] = {}
     if choice and choice in catalog.ids and choice != "escalate":
         try:
-            bound = bind_params(state, catalog.get(choice))
+            bound = bind_params(
+                state, catalog.get(choice), catalog_allowlists=catalog.allowlists
+            )
         except Exception:
             bound = {}
     pre_ok = True

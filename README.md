@@ -6,6 +6,10 @@ Research prototype: a **catalog-bound SysOps harness** for System One decision m
 
 Installable package / CLI: **`escalane`**. Public home: [github.com/escalane-lab/escalane](https://github.com/escalane-lab/escalane).
 
+## Contributors
+
+See [`CONTRIBUTORS.md`](CONTRIBUTORS.md). Primary author: Mátyás Kuti-Kreszács <kutikmatyas@gmail.com>.
+
 ## Documentation
 
 - **Docs site:** [https://escalane-lab.github.io/escalane-docs/](https://escalane-lab.github.io/escalane-docs/) — quick start, gates, claims, and live decide demo
@@ -45,6 +49,8 @@ uv run escalane run --dry-run \
 
 # Optional: Ollama System One (default model d3:2b) — skip if eGPU is busy
 # Library: https://ollama.com/library/d3  (needs ollama serve; pull when free)
+uv run python scripts/smoke_d3.py                  # skips cleanly if Ollama down
+uv run python scripts/smoke_d3.py --pull --harness # pull d3:2b + packed decide
 uv run escalane decide \
   --backend ollama \
   --model d3:2b \
@@ -62,6 +68,27 @@ Env overrides: `ESCALANE_BACKEND`, `ESCALANE_BASE_URL`, `ESCALANE_MODEL`, `ESCAL
 
 Write kill-switch: real writes require both `--allow-writes` and `ALLOW_WRITE_OPERATIONS=true`. The research prototype still refuses live host remediations without an injected test hook.
 
+### Homelab Docker + Omnigent ACP demo
+
+Laptop convenience-automation storyboard (separate from Phase-0 SysOps seed):
+
+```bash
+uv run escalane demo homelab          # mock dry-run Acts 1–3
+uv sync --extra acp && uv run escalane-acp   # Custom ACP for Omnigent
+```
+
+Details: [`demo/homelab/README.md`](demo/homelab/README.md), [`docs/demo-homelab-omnigent.md`](docs/demo-homelab-omnigent.md).
+
+## Local inference layout (this machine)
+
+| Runtime | Typical bind | Role here |
+| --- | --- | --- |
+| **Ollama** | `:11434` on **eGPU** | Often busy with a separate chat/work model — do not assume free capacity for Tev |
+| **LM Studio** | `:1234` on **AMD APU** (~8 GB dedicated) | Target home for a compact decision model (`POST /v1/systemone`) |
+| **mock** | in-process | Offline tests / eval plumbing |
+
+LM Studio docs: [Decisions (System One)](https://lmstudio.ai/docs/developer/jev-compat/systemone). Use the identifier of a **loaded decision model**, not a regular chat model. See [`notes/local_inference_backends.md`](notes/local_inference_backends.md).
+
 ## Layout
 
 | Path | Role |
@@ -70,6 +97,7 @@ Write kill-switch: real writes require both `--allow-writes` and `ALLOW_WRITE_OP
 | `datasets/sysops_decide/` | Decision suite (Phase 0 seed; schema ready for v0.1) |
 | `eval/sysops_decide/` | Eval runner smoke (mock A0 vs A3); path for Phases A–C |
 | [`docs/harness-architecture.md`](docs/harness-architecture.md) | Clear Escalane harness map (layers ↔ code) |
+| `docs/arc42/` | Full arc42, evaluation protocol, ADRs |
 | `tests/` | Offline unit + integration; optional `@pytest.mark.live` |
 
 ## Eval smoke
@@ -78,3 +106,4 @@ Write kill-switch: real writes require both `--allow-writes` and `ALLOW_WRITE_OP
 uv run python eval/sysops_decide/runner.py --backend mock --subset injection
 ```
 
+Mock results are **plumbing only** — see [`notes/eval_false_permit.md`](notes/eval_false_permit.md).

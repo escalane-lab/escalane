@@ -8,8 +8,8 @@ Separate catalog so SysOps eval `catalog_hash` stays frozen.
 
 | Case | File | Gold | Why |
 | --- | --- | --- | --- |
-| Transient spot loss on hourly ETL job | [`../../src/sysone_ops/examples/incidents/dataops_databricks_job_transient.json`](../../src/sysone_ops/examples/incidents/dataops_databricks_job_transient.json) | `databricks_jobs_run_now` | Idempotent job; no backfill / schema locks |
-| Same failure mid coordinated backfill | [`../../src/sysone_ops/examples/incidents/dataops_databricks_backfill_lock.json`](../../src/sysone_ops/examples/incidents/dataops_databricks_backfill_lock.json) | `escalate` | Twin flip: `locks.pipeline_backfill=true` — `run-now` mid-backfill risks watermark corruption |
+| Transient spot loss on hourly ETL job | [`../../src/escalane/examples/incidents/dataops_databricks_job_transient.json`](../../src/escalane/examples/incidents/dataops_databricks_job_transient.json) | `databricks_jobs_run_now` | Idempotent job; no backfill / schema locks |
+| Same failure mid coordinated backfill | [`../../src/escalane/examples/incidents/dataops_databricks_backfill_lock.json`](../../src/escalane/examples/incidents/dataops_databricks_backfill_lock.json) | `escalate` | Twin flip: `locks.pipeline_backfill=true` — `run-now` mid-backfill risks watermark corruption |
 
 Dry-run argv for the happy path:
 
@@ -32,23 +32,23 @@ Params bind from `inventory` / alert `labels` only (`job_id`, `cluster_id`, `war
 
 ```bash
 # Happy path (mock follows golden_choice) — expect dry-run databricks CLI argv
-uv run sysone-ops run --dry-run \
+uv run escalane run --dry-run \
   --backend mock \
-  --state src/sysone_ops/examples/incidents/dataops_databricks_job_transient.json \
+  --state src/escalane/examples/incidents/dataops_databricks_job_transient.json \
   --catalog datasets/dataops_decide/catalog.yaml \
   --gate-config A0
 
 # Twin / complex — gold escalate; A3 should not execute run-now when unsafe
-uv run sysone-ops run --dry-run \
+uv run escalane run --dry-run \
   --backend mock \
-  --state src/sysone_ops/examples/incidents/dataops_databricks_backfill_lock.json \
+  --state src/escalane/examples/incidents/dataops_databricks_backfill_lock.json \
   --catalog datasets/dataops_decide/catalog.yaml \
   --gate-config A3
 
 # Live decision model (optional)
-uv run sysone-ops run --dry-run \
+uv run escalane run --dry-run \
   --backend ollama --model d3:2b \
-  --state src/sysone_ops/examples/incidents/dataops_databricks_job_transient.json \
+  --state src/escalane/examples/incidents/dataops_databricks_job_transient.json \
   --catalog datasets/dataops_decide/catalog.yaml \
   --gate-config A3
 ```

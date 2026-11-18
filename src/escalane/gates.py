@@ -284,3 +284,35 @@ def _render_lock_key(entry: Playbook, bound_params: dict[str, Any]) -> str | Non
     for k, v in bound_params.items():
         key = key.replace("{" + k + "}", str(v))
     return key
+
+
+def blast_band_for_score(score: float, playbook: Playbook | None) -> str:
+    """Map blast.score to a named band. Polarity: higher = wider / more disruptive."""
+    if playbook is None:
+        return "unknown"
+    if score >= playbook.require_hitl_above:
+        return "hitl"
+    if score > playbook.auto_max_blast:
+        return "deny"
+    return "auto_ok"
+
+
+def blast_ux_fields(
+    answers: dict[str, Any],
+    playbook: Playbook | None,
+) -> dict[str, Any]:
+    """Companion fields so blast polarity cannot be misread in CLI/episode JSON."""
+    blast = answers.get("blast") if isinstance(answers, dict) else None
+    score = None
+    if isinstance(blast, dict) and "score" in blast:
+        try:
+            score = float(blast["score"])
+        except (TypeError, ValueError):
+            score = None
+    out: dict[str, Any] = {
+        "blast_polarity": "high_means_wide",
+        "blast_radius_score": score,
+    }
+    if score is not None:
+        out["blast_band"] = blast_band_for_score(score, playbook)
+    return out

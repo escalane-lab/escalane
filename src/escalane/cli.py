@@ -138,7 +138,9 @@ def cmd_decide(args: argparse.Namespace) -> int:
     bound: dict[str, Any] = {}
     if choice and choice in catalog.ids and choice != "escalate":
         try:
-            bound = bind_params(state, catalog.get(choice))
+            bound = bind_params(
+                state, catalog.get(choice), catalog_allowlists=catalog.allowlists
+            )
         except StateError:
             bound = {}
 
@@ -157,12 +159,15 @@ def cmd_decide(args: argparse.Namespace) -> int:
         precheck_ok=pre_ok,
     )
 
+    from escalane.gates import blast_ux_fields
+
     out = {
         "model": resp.model,
         "catalog_hash": catalog.catalog_hash,
         "answers": resp.answers,
         "gate": gate.to_dict(),
         "request_questions": list(build_systemone_request(state, catalog, model)["questions"]),
+        **blast_ux_fields(resp.answers, catalog.get(choice) if choice and choice in catalog.ids else None),
     }
     print(json.dumps(out, indent=2, ensure_ascii=False))
 
@@ -205,7 +210,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     bound: dict[str, Any] = {}
     if choice and choice in catalog.ids and choice != "escalate":
         try:
-            bound = bind_params(state, catalog.get(choice))
+            bound = bind_params(
+                state, catalog.get(choice), catalog_allowlists=catalog.allowlists
+            )
         except StateError as exc:
             print(json.dumps({"error": "bind_params", "detail": str(exc)}), file=sys.stderr)
             bound = {}
@@ -239,6 +246,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         )
         verify = run_postchecks(catalog.get(gate.playbook_id), bound, state=state)
 
+    from escalane.gates import blast_ux_fields
+
     result = {
         "model": resp.model,
         "catalog_hash": catalog.catalog_hash,
@@ -246,6 +255,10 @@ def cmd_run(args: argparse.Namespace) -> int:
         "gate": gate.to_dict(),
         "execution": observation.to_dict() if observation else None,
         "verify": verify.to_dict() if verify else (pre.to_dict() if pre else None),
+        **blast_ux_fields(
+            resp.answers,
+            catalog.get(gate.playbook_id) if gate.playbook_id else None,
+        ),
     }
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
@@ -278,6 +291,24 @@ def cmd_replay(args: argparse.Namespace) -> int:
     summary = replay_summary(episodes)
     print(json.dumps({"count": len(summary), "episodes": summary}, indent=2))
     return 0
+
+
+def cmd_demo(args: argparse.Namespace) -> int:
+    if args.scenario != "homelab":
+        print(json.dumps({"error": "unknown_scenario", "detail": args.scenario}), file=sys.stderr)
+        return 2
+    from escalane.demo_homelab import run_storyboard
+
+    results = run_storyboard(
+        backend=args.backend,
+        model=args.model,
+        base_url=args.base_url,
+        gate_config=args.gate_config,
+        live_stack=bool(args.live_stack),
+        allow_writes=bool(args.allow_writes),
+        quiet=False,
+    )
+    return 0 if all(r.get("choice_ok") for r in results) else 1
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -332,6 +363,39 @@ def build_parser() -> argparse.ArgumentParser:
     rp.add_argument("--episode", required=True)
     rp.set_defaults(func=cmd_replay)
 
+    demo = sub.add_parser(
+        "demo",
+        help="Run a packaged local storyboard (homelab Docker convenience)",
+    )
+    demo.add_argument(
+        "scenario",
+        nargs="?",
+        default="homelab",
+        choices=["homelab"],
+        help="Demo scenario id (default: homelab)",
+    )
+    demo.add_argument(
+        "--backend",
+        choices=["mock", "ollama", "lmstudio", "jev", "http", "custom"],
+        default=os.environ.get("ESCALANE_BACKEND")
+        or os.environ.get("SYSONE_BACKEND", "mock"),
+    )
+    demo.add_argument("--base-url", default=None)
+    demo.add_argument("--model", default=None)
+    demo.add_argument("--gate-config", choices=["A0", "A1", "A2", "A3"], default="A3")
+    demo.add_argument(
+        "--live-stack",
+        action="store_true",
+        help="docker compose up project home + flip convenience-app unhealthy before Acts",
+    )
+    demo.add_argument(
+        "--allow-writes",
+        action="store_true",
+        default=False,
+        help="Require ALLOW_WRITE_OPERATIONS=true as well; default remains dry-run",
+    )
+    demo.set_defaults(func=cmd_demo)
+
     return p
 
 
@@ -339,10 +403,6 @@ def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        if args.command in ("decide", "run"):
-            # Optional ingest rejection when state file itself embeds command keys at top.
-            if args.command == "decide" or args.command == "run":
-                pass
         code = args.func(args)
     except (IngestError, StateError) as exc:
         print(json.dumps({"error": type(exc).__name__, "detail": str(exc)}), file=sys.stderr)

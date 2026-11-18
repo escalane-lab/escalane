@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from escalane.catalog import Catalog, Playbook
+from escalane.state import StateError, validate_bound_params
 
 _SAFE_TOKEN = re.compile(r"^[a-zA-Z0-9_./:@+-]+$")
 
@@ -166,6 +167,13 @@ def execute(
     if playbook_id not in catalog.ids:
         raise ExecutorError(f"unknown playbook: {playbook_id}")
     playbook = catalog.get(playbook_id)
+    # ADR-005: re-check nouns at Act time (callers must not skip bind validation).
+    try:
+        validate_bound_params(
+            bound_params, playbook, catalog_allowlists=catalog.allowlists
+        )
+    except StateError as exc:
+        raise ExecutorError(f"bound_params rejected at execute: {exc}") from exc
     argv = render_argv(playbook, bound_params)
     assert_argv_invariant(
         argv,

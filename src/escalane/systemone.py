@@ -71,7 +71,10 @@ NOUL_INSTRUCTIONS = (
     "Given the state, are harness preconditions for a safe automated "
     "remediation satisfied (no migration lock, evidence complete, host writable)?"
 )
-BLAST_INSTRUCTIONS = "How disruptive is the matching automated action right now?"
+BLAST_INSTRUCTIONS = (
+    "How disruptive is the matching automated action right now? "
+    "Higher score means wider blast / more disruption (not safer)."
+)
 
 
 class BackendError(Exception):

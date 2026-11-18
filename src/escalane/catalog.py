@@ -62,6 +62,8 @@ class Catalog:
     playbooks: dict[str, Playbook]
     catalog_hash: str
     source_path: Path | None = None
+    # Slot-type → approved values (ADR-005). Keys match x-escalane-slot.
+    allowlists: dict[str, list[str]] = field(default_factory=dict)
 
     @property
     def ids(self) -> set[str]:
@@ -156,12 +158,21 @@ def load_catalog(path: str | Path) -> Catalog:
         playbooks[pb.id] = pb
     if "escalate" not in playbooks:
         raise CatalogError("catalog must include escalate playbook")
+    allowlists_raw = data.get("allowlists") or {}
+    allowlists: dict[str, list[str]] = {}
+    if not isinstance(allowlists_raw, dict):
+        raise CatalogError("catalog.allowlists must be a mapping")
+    for slot, values in allowlists_raw.items():
+        if not isinstance(values, list) or not all(isinstance(v, str) for v in values):
+            raise CatalogError(f"allowlists.{slot} must be a list of strings")
+        allowlists[str(slot)] = list(values)
     return Catalog(
         version=version,
         defaults=defaults,
         playbooks=playbooks,
         catalog_hash=catalog_hash_bytes(raw_bytes),
         source_path=path,
+        allowlists=allowlists,
     )
 
 

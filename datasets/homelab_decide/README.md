@@ -4,6 +4,8 @@ Catalog-bound System One playbooks for **personal homelab** Linux admin: Docker/
 
 Separate from SysOps eval catalog so `catalog_hash` there stays frozen.
 
+**ADR-005 allowlists:** top-level `allowlists` plus per-param `x-escalane-slot` / `enum` for containers, compose projects, and services. Pattern-legal but off-list nouns (e.g. `evil-app`) fail at bind and again at execute.
+
 ## Playbooks → argv
 
 | Id | Example dry-run argv |
@@ -25,19 +27,38 @@ Params bind from `inventory` / alert `labels` only. Executor kind `cli` uses cat
 
 | File | Gold |
 | --- | --- |
+| [`homelab_convenience_unhealthy.json`](../../src/escalane/examples/incidents/homelab_convenience_unhealthy.json) | `restart_docker_container` (demo Act 1) |
+| [`homelab_convenience_maintenance.json`](../../src/escalane/examples/incidents/homelab_convenience_maintenance.json) | `escalate` (demo Act 2 twin) |
+| [`homelab_compose_home_sensor.json`](../../src/escalane/examples/incidents/homelab_compose_home_sensor.json) | `docker_compose_restart_service` (demo Act 3) |
 | [`homelab_jellyfin_unhealthy.json`](../../src/escalane/examples/incidents/homelab_jellyfin_unhealthy.json) | `restart_docker_container` |
 | [`homelab_compose_arr_stack.json`](../../src/escalane/examples/incidents/homelab_compose_arr_stack.json) | `docker_compose_restart_service` |
 | [`homelab_pihole_ftl_down.json`](../../src/escalane/examples/incidents/homelab_pihole_ftl_down.json) | `restart_pihole` |
 | [`homelab_sshd_lockout_risk.json`](../../src/escalane/examples/incidents/homelab_sshd_lockout_risk.json) | `escalate` (no alternate console / Tailscale down) |
 
-## Try it
+## Packaged demo (recommended)
+
+```bash
+# Offline Acts 1–3 (mock, dry-run) — see demo/homelab/
+uv run escalane demo homelab
+
+# Optional live Docker stack (compose project `home`)
+make -C demo/homelab up
+uv run escalane demo homelab --live-stack
+
+# Omnigent Custom ACP — docs/demo-homelab-omnigent.md
+uv sync --extra acp && uv run escalane-acp
+```
+
+This demo is **not** Phase-0 SysOps seed eval; it does not touch `sysops_decide` `catalog_hash`.
+
+## Try it (single incident)
 
 ```bash
 uv run escalane run --dry-run \
   --backend mock \
-  --state src/escalane/examples/incidents/homelab_jellyfin_unhealthy.json \
+  --state src/escalane/examples/incidents/homelab_convenience_unhealthy.json \
   --catalog datasets/homelab_decide/catalog.yaml \
-  --gate-config A0
+  --gate-config A3
 
 uv run escalane run --dry-run \
   --backend mock \
@@ -48,7 +69,7 @@ uv run escalane run --dry-run \
 # Live decision model (optional)
 uv run escalane run --dry-run \
   --backend ollama --model d3:2b \
-  --state src/escalane/examples/incidents/homelab_jellyfin_unhealthy.json \
+  --state src/escalane/examples/incidents/homelab_convenience_unhealthy.json \
   --catalog datasets/homelab_decide/catalog.yaml \
   --gate-config A3
 ```
