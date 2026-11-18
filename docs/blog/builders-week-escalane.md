@@ -1,21 +1,3 @@
----
-title: "Catalog-bound Decide+Act: why free tool-calling felt wrong for SysOps writes"
-published: false
-description: "Builders Week story — Escalane / escalane, a catalog-bound Decide+Act harness where the model chooses and only templates run after gates."
-tags: mlhacks, ai, python, security
-# Upload docs/blog/assets/escalane-dev-cover.jpg in the DEV UI
-# cover_image: https://…   # set after DEV upload
----
-
-<!--
-PASTE TO DEV: use docs/blog/devto-paste-ready.md (clean body, no checklist).
-ASSETS:
-  - docs/blog/assets/escalane-dev-cover.jpg  (cover)
-  - docs/blog/assets/escalane-flow-cover.svg (alt cover / diagram)
-  - docs/blog/assets/demo-decide-mock-summary.json
-YOU STILL DO: MLH-linked DEV login, upload cover, optional terminal screenshot, public repo URL if ready.
--->
-
 _This is a submission for the [MLH x DEV Writing Challenge](https://dev.to/mlh-hackathon)_
 
 I spent [MLH Global Hack Week: Builders Week (Nov 6–12, 2026)](https://ghw.mlh.com/events/builders-week) fighting a pattern that still shows up in “AI Ops” demos: an LLM that *talks* about fixing a host, then invents the shell command that would do it.
@@ -24,72 +6,86 @@ This is a builder story — process and trust boundaries, not a preprint.
 
 ## What I Built
 
-**Escalane** is a product framing for SysOps automation: **Decide+Act**. The model chooses *what* kind of fix fits; a harness is the only thing that *runs*. The implementation lives in this repo as **`escalane`**.
+**Escalane** is a catalog-bound **Decide+Act** harness for SysOps. The model chooses *what* kind of fix fits; the harness is the only thing that *runs*. Code + CLI: [`escalane-lab/escalane`](https://github.com/escalane-lab/escalane).
 
-**System One** is the decision backend — it answers typed questions (which playbook, safe to mutate, blast radius) over a scrubbed state blob. It does not get a free tool belt.
+**System One** is the decision backend — it answers typed questions (which playbook, safe to mutate, how wide the blast radius is) over a scrubbed state blob. It does not get a free tool belt.
 
 Why not “Agent = LLM + tools”? In SysOps, a “tool” is often a shell-shaped surface. Free tool-calling collapses three jobs that should not share a brain:
 
 - **Judgment** — which remediation class fits?
 - **Authority** — is it safe to mutate *this* host *now*?
-- **Execution** — exact argv, locks, dry-run, verify
+- **Execution** — exact shell args, locks, dry-run, verify
 
-When the model authors commands, prompt-injected telemetry becomes a remote-code path. I wanted a closed action space: pick a playbook id (or escalate), answer safety questions, and let harness-owned **catalog templates** render argv from **state-bound** params — never from model free text.
+When the model authors commands, prompt-injected telemetry becomes a remote-code path. I wanted a closed action space: pick a playbook id (or escalate), answer safety questions, and let harness-owned **catalog templates** fill shell args from **state-bound** params — never from model free text.
+
+Closing the *verbs* is not enough. If a unit name or container id in the state blob is attacker-influenced, that **noun** can still reach argv through the harness. “Came from state” is provenance, not authority. So each template slot can declare a type (`x-escalane-slot`) and an **allowlist** (`enum` / catalog `allowlists`), checked at bind **and** again at Act time. Ingest still rejects command-like fields; that stays necessary and insufficient.
 
 One simple loop:
 
 - **Ingest** — symptoms only; reject command-like fields
-- **Decide** — System One returns typed answers (choice / noul / score)
-- **Gates** — ordered vetoes; fail closed on low confidence
-- **Catalog act** — template argv only, or escalate / HITL
+- **Decide** — System One returns typed answers (choice / noul / blast score)
+- **Gates** — ordered checks; fail closed when **external** harness authority is missing (precision, lock, allowlist, precheck) — not merely when the model sounds unsure
+- **Catalog act** — template argv only after allowlist re-check, or escalate / ask a human
 
-Research default is dry-run. Writes need dual consent: CLI `--allow-writes` *and* `ALLOW_WRITE_OPERATIONS=true`. Fail-closed `--require-live` refuses silent mock fallback when you asked for a live backend.
+Research default is dry-run (no host mutation). Writes need dual consent: CLI `--allow-writes` *and* `ALLOW_WRITE_OPERATIONS=true`. Fail-closed `--require-live` refuses silent mock fallback when you asked for a live backend.
 
-Lesson that stuck: **harness > model swap**. Changing the decision model does not fix unsafe argv authorship. Grammar ≠ semantic safety.
+Lesson that stuck: **harness > model swap**. Changing the decision model does not fix unsafe shell-arg authorship. Grammar ≠ semantic safety. Provenance ≠ allowlist. Confidence ≠ authority.
 
 ## Demo
 
-No public deploy yet — the usable path today is a local CLI walkthrough. Dry-run is the default research posture (nothing mutates a host unless you intentionally unlock writes).
+Docs site: [escalane-lab.github.io/escalane-docs](https://escalane-lab.github.io/escalane-docs/). The usable path is a local CLI walkthrough (screenshot below). Dry-run is the default: nothing mutates a host unless you intentionally unlock writes. The model never writes shell args — only catalog templates do.
 
-Offline decide (no host mutation):
+`--gate-config` picks how strict the ordered safety checks are. Gates **A0–A3** run in order; each can veto before anything runs:
+
+- **A0** — is the chosen playbook in the catalog? (harness membership)
+- **A1** — is noul / confidence high enough? (**model self-report** — useful filter, not proof; a steered choice has no reason to look unconfident)
+- **A2** — is blast radius acceptable against harness thresholds?
+- **A3** — is fitted **per-label precision** (harness empirical table) good enough? If not → **human review** (HITL)
+
+**A3** is the research posture I actually demo for mutate paths. On this **live** Ollama run with System One `d3:4b`, it still asked for a human, because fitted label precision was conservative — even though the model picked a valid catalog playbook and reported high noul.
+
+Live decide (no host mutation; fail-closed if the backend is down):
 
 ```bash
 uv sync
 uv run escalane decide \
-  --backend mock \
+  --backend ollama \
+  --model d3:4b \
+  --require-live \
   --state src/escalane/examples/incidents/php_502.json \
   --catalog datasets/sysops_decide/catalog.yaml \
   --gate-config A3
 ```
 
-Trimmed output from that exact command on the seed PHP 502 incident ([full summary](assets/demo-decide-mock-summary.json)):
+Trimmed output from that exact live command on the seed PHP 502 incident:
+
+![escalane decide live Ollama d3:4b A3 terminal](https://escalane-lab.github.io/escalane-docs/demo/demo-decide-live-terminal.png)
 
 ```json
 {
-  "model": "mock",
+  "model": "d3:4b",
+  "backend": "ollama",
   "playbook": "restart_php_fpm",
-  "noul": 0.95,
-  "blast_score": 0.3,
+  "noul": 0.9878,
+  "blast_radius_score": 0.9822,
+  "blast_polarity": "high_means_wide",
   "gate_decision": "hitl",
   "gate_reason": "label_precision",
   "dry_run_only": true
 }
 ```
 
-The model picked a catalog playbook. A3 still routed to **HITL** (conservative label-precision) instead of executing — dry-run only, no argv invented by the model.
+Read that as: live System One answers, catalog playbook selected, dry-run only, no shell args invented by the model, and A3 routed to human review instead of execute. **`blast_radius_score` high means wide / more disruptive**, not “safer” — `0.98` is near the dangerous end of the ordinal. The CLI also emits `blast_polarity: "high_means_wide"` so that legend cannot get lost.
 
-When a live backend is up (e.g. Ollama), the same path works with `--backend ollama` and `--require-live` if you want fail-closed instead of pretending.
-
-Cover / diagram assets (upload cover in DEV UI):
-
-- ![Decide then Act flow](assets/escalane-dev-cover.jpg)
-- Alt SVG: [`assets/escalane-flow-cover.svg`](assets/escalane-flow-cover.svg)
+<!-- Upload docs/blog/assets/escalane-dev-cover.jpg as the DEV cover image.
+     Optional second media: paste a terminal screenshot of the command above. -->
 
 Public links:
 
-- Harness map in-repo: `docs/harness-architecture.md`
+- Repo: [github.com/escalane-lab/escalane](https://github.com/escalane-lab/escalane)
+- Docs / site: [escalane-lab.github.io/escalane-docs](https://escalane-lab.github.io/escalane-docs/)
+- Harness map: [`docs/harness-architecture.md`](https://github.com/escalane-lab/escalane-docs/blob/main/docs/harness-architecture.md)
 - System One wire format: [Decisions (System One)](https://lmstudio.ai/docs/developer/jev-compat/systemone)
-- <!-- Uncomment when public: Repo: https://github.com/… -->
 
 ## Partner Technologies
 
@@ -106,7 +102,7 @@ Challenges that felt real during the week: model pulls and DNS hiccups, an eGPU 
 
 We measured gate postures against ungated / free tool-calling baselines on a seed suite — enough to see that catalog membership alone is not enough under injection-shaped prompts. Full metrics stay out of this post; they belong in a later paper draft.
 
-This is a **research harness**, not a production-certified remediator. Conservative gates will HITL more than a demo agent that always “just runs the fix.”
+This is a **research harness**, not a production-certified remediator. Conservative gates will ask for a human more often than a demo agent that always “just runs the fix.”
 
 ## Hackathon Experience
 
@@ -114,9 +110,9 @@ Builders Week felt like permission to ship the *shape* of the idea without prete
 
 What I’ll remember: sticky-note clarity. *The model chooses; the harness is the only thing that runs.* Locking the CLI path (`decide` / `run` / `replay`), a seed catalog, and the Decide→Gates→Act skeleton mattered more than chasing a flashy demo that shells out from a prompt.
 
-What matured after the week was still builder work: params-from-state as a hard rule, gate postures that are usable (deny-all is a failed product, not a safety win), and fail-closed live backends.
+What matured after the week was still builder work: params-from-state **plus** Act-time allowlists, gate postures that treat model confidence as a filter not a warrant, blast scores with an explicit polarity legend, and fail-closed live backends.
 
-If you are also fighting “LLM with bash privileges,” I would love to hear how you drew the trust boundary.
+If you are also fighting “LLM with bash privileges,” I would love to hear how you drew the trust boundary — especially where you put noun allowlists versus model self-report.
 
 ---
 
@@ -126,14 +122,12 @@ If you are also fighting “LLM with bash privileges,” I would love to hear ho
 
 - [x] DevRelay 0.1.27 installed (`~/.devrelay/bin/devrelay`)
 - [x] Paste-ready body: [`devto-paste-ready.md`](devto-paste-ready.md)
-- [x] Demo JSON summary captured: [`assets/demo-decide-mock-summary.json`](assets/demo-decide-mock-summary.json)
+- [x] Live demo JSON summary: [`assets/demo-decide-live-summary.json`](assets/demo-decide-live-summary.json) (Ollama `d3:4b`)
+- [x] Terminal demo on Pages: https://escalane-lab.github.io/escalane-docs/demo/demo-decide-live-terminal.png
 - [x] Cover image: [`assets/escalane-dev-cover.jpg`](assets/escalane-dev-cover.jpg)
 - [x] SVG alt cover: [`assets/escalane-flow-cover.svg`](assets/escalane-flow-cover.svg)
-- [ ] Run `devrelay login` (MLH account with DEV linked in MLH profile)
-- [ ] Restart Cursor so `devrelay-gateway` MCP loads
-- [ ] Ask agent: stage draft via DevRelay `create_article` with `published: false`, tags `mlhacks, ai, python, security`, body from `devto-paste-ready.md`
-- [ ] Open the returned **`edit_url`** (not the temp `url`); upload cover in DEV UI
-- [ ] Optional: terminal screenshot; public GitHub URL if the clone is public
+- [x] Draft staged via DevRelay (`id` 5059414) with docs URL + demo PNG
+- [ ] Open the draft **`edit_url`**; upload cover in DEV UI if not already set
 - [ ] Publish from DEV (or ask agent only after an explicit yes)
 
 **Fallback:** paste [`devto-paste-ready.md`](devto-paste-ready.md) manually in the DEV editor under the MLH-linked account.

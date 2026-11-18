@@ -5,6 +5,18 @@ defaults:
   write_enabled: false
   dry_run_default: true
 
+# ADR-005: catalog-level allowlists by slot type (Act-time authority, not provenance).
+allowlists:
+  container:
+    - convenience-app
+    - jellyfin
+  service:
+    - sensor-bridge
+    - sonarr
+  project:
+    - home
+    - media
+
 playbooks:
   - id: restart_docker_container
     criteria: >
@@ -22,7 +34,11 @@ playbooks:
       type: object
       required: [container]
       properties:
-        container: { type: string, pattern: "^[a-z0-9][a-z0-9_-]{1,63}$" }
+        container:
+          type: string
+          pattern: "^[a-z0-9][a-z0-9_-]{1,63}$"
+          x-escalane-slot: container
+          enum: [convenience-app, jellyfin]
     prechecks:
       - type: lock_absent
         id: not_maint
@@ -154,8 +170,16 @@ playbooks:
       type: object
       required: [project, service]
       properties:
-        project: { type: string, pattern: "^[a-z0-9][a-z0-9_-]{1,63}$" }
-        service: { type: string, pattern: "^[a-z0-9][a-z0-9_-]{1,63}$" }
+        project:
+          type: string
+          pattern: "^[a-z0-9][a-z0-9_-]{1,63}$"
+          x-escalane-slot: project
+          enum: [home, media]
+        service:
+          type: string
+          pattern: "^[a-z0-9][a-z0-9_-]{1,63}$"
+          x-escalane-slot: service
+          enum: [sensor-bridge, sonarr]
     prechecks:
       - type: lock_absent
         id: not_maint

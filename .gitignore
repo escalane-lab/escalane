@@ -1,11 +1,36 @@
+# Python-generated files
 __pycache__/
 *.py[oc]
 build/
 dist/
 wheels/
 *.egg-info
+
+# Virtual environments
 .venv
 .env
+
+# Local agent / editor
+.cursor/
+.claude/
+
+# Eval artifacts (regenerated)
 eval/sysops_decide/results/
 eval/sysops_decide/episodes/
 .pytest_cache/
+
+# Site (Astro)
+site/node_modules/
+site/dist/
+site/.astro/
+node_modules/
+
+# LaTeX build junk (keep PDFs if desired)
+papers/escalane/*.aux
+papers/escalane/*.log
+papers/escalane/*.out
+papers/escalane/*.fls
+papers/escalane/*.fdb_latexmk
+papers/escalane/*.synctex.gz
+papers/escalane/*.bbl
+papers/escalane/*.blg

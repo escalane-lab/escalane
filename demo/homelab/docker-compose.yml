@@ -1,0 +1,39 @@
+# Lightweight convenience-automation lab for Escalane Decide+Act demos.
+# Project name must be `home` (matches demo incident inventory).
+name: home
+
+services:
+  convenience-app:
+    build: ./app
+    container_name: convenience-app
+    environment:
+      SERVICE_NAME: convenience-app
+      HEALTH_FILE: /data/health
+      PORT: "8080"
+    volumes:
+      - app_health:/data
+    ports:
+      - "18080:8080"
+
+  sensor-bridge:
+    build: ./app
+    container_name: home-sensor-bridge-1
+    environment:
+      SERVICE_NAME: sensor-bridge
+      HEALTH_FILE: /data/health
+      PORT: "8080"
+    volumes:
+      - bridge_health:/data
+    ports:
+      - "18081:8080"
+
+  mqtt:
+    profiles: ["mqtt"]
+    image: eclipse-mosquitto:2
+    container_name: home-mqtt-1
+    ports:
+      - "1883:1883"
+
+volumes:
+  app_health:
+  bridge_health:

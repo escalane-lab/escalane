@@ -151,9 +151,14 @@ sequenceDiagram
 Rules:
 
 1. Params come from **state** (`bind_params`) — never from model free text.  
-2. Argv is rendered from playbook `args_template` / adapter stubs.  
-3. Forbidden substrings / host checks catch injection at execute time.  
-4. Unauthorized argv must stay **0** on eval smokes.
+2. **Provenance ≠ allowlist (ADR-005):** bound values are checked against JSON Schema `pattern` / `enum` and catalog `allowlists` keyed by `x-escalane-slot`, at **bind** and again at **execute** before argv render.  
+3. Argv is rendered from playbook `args_template` / adapter stubs.  
+4. Forbidden substrings / host checks catch injection at execute time.  
+5. Unauthorized argv must stay **0** on eval smokes.
+
+**Blast polarity:** System One `blast.score` is **high = wide / more disruptive**. CLI emits `blast_polarity: high_means_wide` and `blast_band` (`auto_ok` | `deny` | `hitl`).
+
+**Gate authority:** A1 `noul`/confidence are **model self-report** (soft filter). Mutate authority also needs harness signals — allowlists, locks, prechecks, and A3 per-label precision. Research posture for mutate paths: **A3**, not A1 alone.
 
 Catalogs are domain packs (SysOps seed, Databricks, homelab). Eval `catalog_hash` is SHA-256 of raw `catalog.yaml` bytes.
 
@@ -163,10 +168,12 @@ Catalogs are domain packs (SysOps seed, Databricks, homelab). Eval `catalog_hash
 
 | Surface | Entry | Notes |
 | --- | --- | --- |
-| CLI | `uv run escalane …` | Primary research UX |
+| CLI | `uv run escalane …` | Primary research UX (`decide` / `run` / `replay` / `demo`) |
+| Homelab demo | `uv run escalane demo homelab` | Docker convenience Acts 1–3; [`demo/homelab/`](../demo/homelab/) |
+| Omnigent ACP | `uv run escalane-acp` | Custom ACP stdio (`--extra acp`); not Phase-0 |
 | Eval runner | `eval/sysops_decide/runner.py` | A0/A3 false-permit smoke |
 | Repro package | [`repro/escalane/`](../repro/escalane/) | Vendored seed + notebooks + CSV results |
-| Tests | `tests/` markers `unit` / `integration` / `live` | Live skips if Ollama down |
+| Tests | `tests/` markers `unit` / `integration` / `live` / `live_docker` / `acp` | Live skips if Ollama down |
 
 ---
 
@@ -189,7 +196,8 @@ Claim fence: summaries record `backend_role: live|plumbing`, `catalog_hash`, and
 | --- | --- |
 | [`arc42/architecture.md`](./arc42/architecture.md) | Full arc42 §§1–12 |
 | [`arc42/evaluation.md`](./arc42/evaluation.md) | Metrics and experiment protocol |
-| [`arc42/adrs/`](./arc42/adrs/) | Locked decisions (System One vs tools, params-from-state, …) |
+| [`arc42/adrs/`](./arc42/adrs/) | Locked decisions (System One vs tools, params-from-state, slot allowlists, …) |
+| [`demo-homelab-omnigent.md`](./demo-homelab-omnigent.md) | Laptop Docker demo + Omnigent ACP |
 | [`notes/harness_architecture.md`](../notes/harness_architecture.md) | Research notes / citations |
 | [`papers/escalane/main.tex`](../papers/escalane/main.tex) | Paper framing |
 | Site docs | `site/src/pages/docs/` (operator-facing) |

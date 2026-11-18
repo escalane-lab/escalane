@@ -31,6 +31,12 @@ _FORBIDDEN_KEYS = frozenset(
 
 _HOST_RE = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
 
+# ADR-005 slot types (x-escalane-slot).
+SLOT_TYPES = frozenset(
+    {"host", "unit", "container", "service", "project", "path", "job_id"}
+)
+SLOT_KEY = "x-escalane-slot"
+
 
 def state_digest(state: dict[str, Any]) -> str:
     digest = hashlib.sha256(stable_json(state).encode("utf-8")).hexdigest()
@@ -85,7 +91,44 @@ def _schema_type_ok(value: Any, expected: str) -> bool:
     return True
 
 
-def _validate_against_schema(params: dict[str, Any], schema: dict[str, Any]) -> None:
+def _validate_path_slot(value: str, prop: dict[str, Any]) -> None:
+    if "\x00" in value or ".." in value:
+        raise StateError("path param rejected (traversal or NUL)")
+    prefixes = prop.get("x-escalane-path-prefixes")
+    if isinstance(prefixes, list) and prefixes:
+        if not any(value == p or value.startswith(str(p).rstrip("/") + "/") for p in prefixes):
+            raise StateError("path param outside allowed prefixes")
+
+
+def _allowed_for_slot(
+    slot: str,
+    value: str,
+    *,
+    prop: dict[str, Any],
+    catalog_allowlists: dict[str, list[str]] | None,
+) -> None:
+    """Enforce playbook enum (narrowest) then catalog allowlists for the slot."""
+    enum_vals = prop.get("enum")
+    if isinstance(enum_vals, list) and enum_vals:
+        if value not in enum_vals:
+            raise StateError(f"param value {value!r} not in enum allowlist")
+        return
+    if catalog_allowlists and slot in catalog_allowlists:
+        allowed = catalog_allowlists[slot]
+        if allowed and value not in allowed:
+            raise StateError(
+                f"param value {value!r} not in catalog allowlist for slot {slot!r}"
+            )
+
+
+def validate_bound_params(
+    params: dict[str, Any],
+    playbook: Playbook,
+    *,
+    catalog_allowlists: dict[str, list[str]] | None = None,
+) -> None:
+    """Act-time validation (ADR-003/005): schema, enum, slot allowlists, path rules."""
+    schema = playbook.params_schema or {}
     if not schema:
         return
     if schema.get("type") and schema.get("type") != "object":
@@ -97,7 +140,6 @@ def _validate_against_schema(params: dict[str, Any], schema: dict[str, Any]) -> 
             raise StateError(f"missing required param: {key}")
     for key, value in params.items():
         if key not in properties:
-            # Extra keys rejected for safety in v1.
             raise StateError(f"unexpected param: {key}")
         prop = properties[key]
         expected = prop.get("type")
@@ -107,10 +149,57 @@ def _validate_against_schema(params: dict[str, Any], schema: dict[str, Any]) -> 
         if pattern and isinstance(value, str):
             if not re.fullmatch(pattern, value):
                 raise StateError(f"param {key} failed pattern")
+        enum_vals = prop.get("enum")
+        if isinstance(enum_vals, list) and enum_vals and value not in enum_vals:
+            raise StateError(f"param {key} value {value!r} not in enum allowlist")
+        slot = prop.get(SLOT_KEY)
+        if slot is not None:
+            if slot not in SLOT_TYPES:
+                raise StateError(f"unknown x-escalane-slot: {slot}")
+            if not isinstance(value, str):
+                raise StateError(f"slot {slot} requires string value")
+            if slot == "path":
+                _validate_path_slot(value, prop)
+            _allowed_for_slot(
+                str(slot),
+                value,
+                prop=prop,
+                catalog_allowlists=catalog_allowlists,
+            )
+        elif isinstance(enum_vals, list) and enum_vals:
+            # enum without slot still enforced above
+            pass
+        elif catalog_allowlists and key in ("container", "service", "project", "unit", "host"):
+            # Implicit slot from common param names when catalog lists that type.
+            implied = key if key != "host" else "host"
+            if implied in catalog_allowlists and catalog_allowlists[implied]:
+                if not isinstance(value, str) or value not in catalog_allowlists[implied]:
+                    raise StateError(
+                        f"param {key} value {value!r} not in catalog allowlist "
+                        f"for slot {implied!r}"
+                    )
 
 
-def bind_params(state: dict[str, Any], playbook: Playbook) -> dict[str, Any]:
-    """Bind params from inventory / alert labels only (ADR-003)."""
+def _validate_against_schema(
+    params: dict[str, Any],
+    schema: dict[str, Any],
+    *,
+    catalog_allowlists: dict[str, list[str]] | None = None,
+) -> None:
+    """Schema-only helper for tests; production paths use validate_bound_params."""
+    from escalane.catalog import Playbook as _Playbook
+
+    pb = _Playbook(id="_tmp", criteria="tmp", params_schema=schema)
+    validate_bound_params(params, pb, catalog_allowlists=catalog_allowlists)
+
+
+def bind_params(
+    state: dict[str, Any],
+    playbook: Playbook,
+    *,
+    catalog_allowlists: dict[str, list[str]] | None = None,
+) -> dict[str, Any]:
+    """Bind params from inventory / alert labels only (ADR-003); allowlists (ADR-005)."""
     if not playbook.mutates:
         return {}
     inventory = state.get("inventory") if isinstance(state.get("inventory"), dict) else {}
@@ -145,7 +234,7 @@ def bind_params(state: dict[str, Any], playbook: Playbook) -> dict[str, Any]:
         if not _HOST_RE.match(bound["host"]):
             raise StateError("invalid host param")
 
-    _validate_against_schema(bound, schema)
+    validate_bound_params(bound, playbook, catalog_allowlists=catalog_allowlists)
     return bound
 
 
